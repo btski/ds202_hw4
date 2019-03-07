@@ -1,0 +1,113 @@
+---
+title: 'Homework #4'
+author: "Blake Inderski, btski"
+date: "3/6/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("ggplot2")
+library("dplyr")
+library("datasets")
+```
+
+## Chick weights
+
+The `ChickWeight` data set is part of the base package `datasets`. See `?ChickWeight` for details on the data.
+For all of the questions use `dplyr` functions with the pipe `%>%` whenever possible.
+
+**Submission instructions**: Create a folder named `ds202_hw4`, and name the RMarkDown file including your solutions `hw4.Rmd` under this folder. For the submission, create a GitHub repository named `ds202_hw4` under your GitHub account, and push both `hw4.Rmd` and the knitted `hw4.html` before the deadline. I will assume you use the same GitHub username as for your HW3 submission. The latest version of your homework appearing on GitHub before the deadline is graded. *It is crucial to follow the exact folder structure and file names*, so that your homework can be reproduced and graded by an automated script. This homework is **due on March 7** before class.
+
+1. Get a frequency breakdown of the number of chicks, their average weight and the standard deviation of the weights in each of the diets at the start of the study. Store the resulting data frame in a variable named `weight0` and print.<br>
+```{r}
+data1 <- ChickWeight %>% filter(Time == 0)
+weight0 <- group_by(data1, Diet) %>% summarise(n = n(), mean = mean(weight), stdv = sd(weight))
+print(weight0)
+```
+<!-- 5 pts of extra credit: construct a ggplot that shows average weights by diet with an interval (shown as a line) of +- the standard deviation around the averages. -->
+```{r}
+plot1 <- ggplot(weight0, aes(x=Diet, y=mean)) + geom_bar(stat="identity") + geom_errorbar(aes(ymin=mean-stdv, ymax=mean+stdv))
+plot1
+```
+<br />
+2. Each chick should have twelve weight measurements. Use the dplyr package to identify how many measurements are there for each chick. Extract a subset of the data for all chicks with complete information, name the data set `complete`, and print the first 3 rows. (Hint: you might want to use mutate to introduce a helper variable consisting of the number of observations)
+```{r}
+check_complete <- group_by(ChickWeight, Chick) %>% summarise(n = n())
+check_vector <- check_complete %>% filter(n == max(check_complete$n)) %>% pull(Chick)
+complete <- ChickWeight %>% filter(Chick %in% check_vector)
+print(complete[0:3, ])
+```
+3. In the complete data set introduce a new variable that measures the current weight difference compared to day 0. Name this variable  `weightgain` and print the first 3 rows of the new data frame.
+```{r}
+complete <- group_by(complete, Chick) %>% arrange(Chick, Time) %>% mutate(weightgain = weight - first(weight))
+print(complete[0:3, ])
+```
+4. Use `{ggplot2}` to create side-by-side boxplots of `weightgain` by `Diet` for day 21. Describe the relationship in 2-3 sentences. Change the order of the categories in the Diet variable such that the boxplots are ordered by median `weightgain`, and the lower limit of the y axis should be 0.
+```{r}
+data2 <- complete %>% filter(Time == 21)
+plot2 <- ggplot(data2, aes(x=reorder(Diet, weightgain, FUN=median), y=weightgain)) + geom_boxplot() + ylim(0, 350) + xlab("Diet #")
+plot2
+```
+<br />
+Most effective diet can be gauged by net weight gain. Diet one was least effective. In comparison, the most effective diet (4) resulted in nearly twice the weight gain.
+<br /><br />
+
+5. Answer the following question using numerical and graphical summary: Which chick gained the most weight and which gained the least weight? What diets were they on?
+```{r}
+most_growth <- data2 %>% filter(weightgain == max(data2$weightgain))
+least_growth <- data2 %>% filter(weightgain == min(data2$weightgain))
+summary(most_growth)
+summary(least_growth)
+#https://stackoverflow.com/questions/14351608/color-one-point-and-add-an-annotation-in-ggplot2
+data2$highlight <- ifelse(data2$weightgain == max(data2$weightgain), "max", "other")
+data2$highlight[data2$weightgain == min(data2$weightgain)] <- 'min'
+data2
+mycolors <- c("max" = "red", "min" = "blue", "other" = "grey50")
+ggplot(data2, aes(x=Diet, y=weightgain, color=highlight)) + scale_color_manual("Status", values = mycolors) + geom_jitter(width=0.1) + ylim(0, 350) + xlab("Diet #")
+```
+<br />
+Chick 35 gained the most weight (332) on diet 3. Chick 24 gained the least weight (32) on diet 2.
+<br /><br />
+
+6. For the chicks with the least and the most weight at time 0, plot their growth trajectories over time. </br>
+```{r}
+small_chick_vector <- group_by(complete, Time) %>% filter(Time == 0) %>% mutate(min_weight = min(weight)) %>% filter(weight == min_weight) %>% pull(Chick)
+big_chick_vector <- group_by(complete, Time) %>% filter(Time == 0) %>% mutate(max_weight = max(weight)) %>% filter(weight == max_weight) %>% pull(Chick)
+
+data3 <- complete %>% filter(Chick %in% small_chick_vector)
+data4 <- complete %>% filter(Chick %in% big_chick_vector)
+plot3 <- ggplot(data3, aes(x=Time, y=weightgain)) + geom_point(aes(color=Chick)) + geom_line(aes(color=Chick))
+plot4 <- ggplot(data4, aes(x=Time, y=weightgain)) + geom_point(aes(color=Chick)) + geom_line(aes(color=Chick))
+plot3
+plot4
+```
+<!-- 5 pts of extra credit: Add to the plot the average growth trajectory for all chicks (calculated as the mean weight for each chick at each time). How do the trajectories compare? -->
+```{r}
+data5 <- group_by(complete, Time) %>% summarise(mean = mean(weightgain))
+plot3 + geom_smooth(data=data5, aes(x=Time, y=mean, color="mean"), se=F) + ylim(0, 300)
+plot4 + geom_smooth(data=data5, aes(x=Time, y=mean, color="mean"), se=F) + ylim(0, 300)
+```
+<br />
+Chicks with minimum starting weight tend to exceed the mean growth rate. Chicks with maximum starting weight had a growth rate less than the mean.
+<br /><br />
+
+7. What else do you find interesting in the dataset? Show your exploratory analysis.
+```{r}
+#explore growth of pigs that do not have complete records.
+check_complete <- group_by(ChickWeight, Chick) %>% summarise(n = n())
+check_vector <- check_complete %>% filter(n == max(check_complete$n)) %>% pull(Chick)
+not_complete <- group_by(ChickWeight, Chick) %>% filter(!(Chick %in% check_vector)) %>% arrange(Chick, Time) %>% mutate(weightgain = weight - first(weight))
+#nrow(not_complete)
+ggplot() + geom_boxplot(data=complete[complete$Time == 0, ], aes(x="complete", y=weight)) + geom_boxplot(data=not_complete[not_complete$Time == 0, ], aes(x="not_complete", y=weight))
+
+ggplot(not_complete, aes(x=Time, y=weightgain)) + geom_point(aes(color=Chick)) + geom_line(aes(color=Chick)) + geom_smooth(data=data5, aes(x=Time, y=mean, color="mean"), se=F) + ylim(0, 300)
+```
+<br />
+Chose to compare some aspects of the complete/incomplete data. Starting weight can influence growth rate; starting weight was largely similar between both sets. Growth rates were less than the average and platued prior to ending prematurely. This suggests that the animals contracted an illness and died prior to the completion of the study.
+<br /><br />
+
+Note: your submission is supposed to be fully reproducible, i.e. the TA and I will 'knit' your submission in RStudio. 
